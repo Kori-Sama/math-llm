@@ -27,9 +27,11 @@ app.add_middleware(
 )
 
 
-# 用户注册
 @app.post("/api/users/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 async def register_user(user: UserCreate, db: Session = Depends(get_db)):
+    """
+    用户注册
+    """
     # 检查用户名是否已存在
     db_user = db.query(User).filter(User.username == user.username).first()
     if db_user:
@@ -56,6 +58,9 @@ async def register_user(user: UserCreate, db: Session = Depends(get_db)):
 # 用户登录
 @app.post("/api/users/login", response_model=Token)
 async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+    """
+    用户登录接口
+    """
     user = authenticate_user(db, form_data.username, form_data.password)
     if not user:
         raise HTTPException(
@@ -73,12 +78,18 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
 # 获取当前用户信息
 @app.get("/api/users/me", response_model=UserResponse)
 async def read_users_me(current_user = Depends(get_current_active_user)):
+    """
+    获取当前登录用户的信息
+    """
     return current_user
 
 
 # 创建新对话
 @app.post("/api/conversations", response_model=ConversationResponse)
 async def create_conversation(conversation: ConversationCreate, current_user = Depends(get_current_active_user), db: Session = Depends(get_db)):
+    """
+    创建新的对话
+    """
     db_conversation = Conversation(
         title=conversation.title,
         user_id=current_user.id
@@ -92,6 +103,9 @@ async def create_conversation(conversation: ConversationCreate, current_user = D
 # 获取用户的所有对话
 @app.get("/api/conversations", response_model=List[ConversationResponse])
 async def get_conversations(current_user = Depends(get_current_active_user), db: Session = Depends(get_db)):
+    """
+    获取当前用户的所有对话列表
+    """
     conversations = db.query(Conversation).filter(Conversation.user_id == current_user.id).all()
     return conversations
 
@@ -99,6 +113,9 @@ async def get_conversations(current_user = Depends(get_current_active_user), db:
 # 获取特定对话
 @app.get("/api/conversations/{conversation_id}", response_model=ConversationResponse)
 async def get_conversation(conversation_id: int, current_user = Depends(get_current_active_user), db: Session = Depends(get_db)):
+    """
+    获取指定ID的对话信息
+    """
     conversation = db.query(Conversation).filter(Conversation.id == conversation_id, Conversation.user_id == current_user.id).first()
     if not conversation:
         raise HTTPException(status_code=404, detail="对话不存在")
@@ -108,6 +125,9 @@ async def get_conversation(conversation_id: int, current_user = Depends(get_curr
 # 获取对话的所有消息
 @app.get("/api/conversations/{conversation_id}/messages", response_model=List[MessageResponse])
 async def get_messages(conversation_id: int, current_user = Depends(get_current_active_user), db: Session = Depends(get_db)):
+    """
+    获取指定对话的所有消息
+    """
     # 验证对话存在且属于当前用户
     conversation = db.query(Conversation).filter(Conversation.id == conversation_id, Conversation.user_id == current_user.id).first()
     if not conversation:
@@ -120,6 +140,9 @@ async def get_messages(conversation_id: int, current_user = Depends(get_current_
 # 创建新消息并获取LLM回复
 @app.post("/api/conversations/{conversation_id}/messages")
 async def create_message(conversation_id: int, message: MessageCreate, current_user = Depends(get_current_active_user), db: Session = Depends(get_db)):
+    """
+    创建新消息并获取LLM的回复
+    """
     # 验证对话存在且属于当前用户
     conversation = db.query(Conversation).filter(Conversation.id == conversation_id, Conversation.user_id == current_user.id).first()
     if not conversation:
@@ -155,12 +178,18 @@ async def create_message(conversation_id: int, message: MessageCreate, current_u
 # 直接调用LLM（无历史记录）
 @app.post("/api/llm/chat")
 async def chat_with_llm(request: LLMRequest, current_user = Depends(get_current_active_user)):
+    """
+    直接与LLM对话，不保存历史记录
+    """
     return await process_llm_request(request)
 
 
 # 保存LLM回复
 @app.post("/api/conversations/{conversation_id}/save_response", response_model=MessageResponse)
 async def save_llm_response(conversation_id: int, message: MessageCreate, current_user = Depends(get_current_active_user), db: Session = Depends(get_db)):
+    """
+    保存LLM的回复消息
+    """
     # 验证对话存在且属于当前用户
     conversation = db.query(Conversation).filter(Conversation.id == conversation_id, Conversation.user_id == current_user.id).first()
     if not conversation:
@@ -186,9 +215,7 @@ async def save_llm_response(conversation_id: int, message: MessageCreate, curren
 # 健康检查
 @app.get("/health")
 async def health_check():
+    """
+    API服务健康检查接口
+    """
     return {"status": "ok"}
-
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)
