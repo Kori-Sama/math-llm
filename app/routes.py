@@ -227,7 +227,22 @@ async def save_llm_response(conversation_id: int, message: MessageCreate, curren
     return db_message
 
 
-# 健康检查
+@app.patch("/api/conversations/{conversation_id}")
+async def update_conversation(conversation_id: int, title: str, current_user=Depends(get_current_active_user), db: Session = Depends(get_db)):
+    """
+    更新对话标题
+    """
+    # 验证对话存在且属于当前用户
+    conversation = db.query(Conversation).filter(
+        Conversation.id == conversation_id, Conversation.user_id == current_user.id).first()
+    if not conversation:
+        raise HTTPException(status_code=404, detail="对话不存在")
+
+    conversation.title = title
+    db.commit()
+    return conversation
+
+
 @app.get("/health")
 async def health_check():
     """
