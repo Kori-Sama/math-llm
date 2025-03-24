@@ -7,9 +7,9 @@ from typing import List
 
 from app.database import get_db, engine
 from app.models import Base, User, Conversation, Message
-from app.schemas import UserCreate, UserResponse, Token, ConversationCreate, ConversationResponse, MessageCreate, MessageResponse, LLMRequest
+from app.schemas import TOTRequest, UserCreate, UserResponse, Token, ConversationCreate, ConversationResponse, MessageCreate, MessageResponse, LLMRequest
 from app.auth import authenticate_user, create_access_token, get_password_hash, get_current_active_user, ACCESS_TOKEN_EXPIRE_MINUTES
-from app.llm_service import process_llm_request, format_history_for_llm
+from app.llm_service import process_llm_request, format_history_for_llm, process_tot_request
 
 # 创建数据库表
 Base.metadata.create_all(bind=engine)
@@ -36,12 +36,12 @@ async def register_user(user: UserCreate, db: Session = Depends(get_db)):
     db_user = db.query(User).filter(User.username == user.username).first()
     if db_user:
         raise HTTPException(status_code=400, detail="用户名已被注册")
-    
+
     # 检查邮箱是否已存在
     db_email = db.query(User).filter(User.email == user.email).first()
     if db_email:
         raise HTTPException(status_code=400, detail="邮箱已被注册")
-    
+
     # 创建新用户
     hashed_password = get_password_hash(user.password)
     db_user = User(
@@ -77,7 +77,7 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
 
 # 获取当前用户信息
 @app.get("/api/users/me", response_model=UserResponse)
-async def read_users_me(current_user = Depends(get_current_active_user)):
+async def read_users_me(current_user=Depends(get_current_active_user)):
     """
     获取当前登录用户的信息
     """
@@ -86,7 +86,7 @@ async def read_users_me(current_user = Depends(get_current_active_user)):
 
 # 创建新对话
 @app.post("/api/conversations", response_model=ConversationResponse)
-async def create_conversation(conversation: ConversationCreate, current_user = Depends(get_current_active_user), db: Session = Depends(get_db)):
+async def create_conversation(conversation: ConversationCreate, current_user=Depends(get_current_active_user), db: Session = Depends(get_db)):
     """
     创建新的对话
     """
@@ -102,21 +102,23 @@ async def create_conversation(conversation: ConversationCreate, current_user = D
 
 # 获取用户的所有对话
 @app.get("/api/conversations", response_model=List[ConversationResponse])
-async def get_conversations(current_user = Depends(get_current_active_user), db: Session = Depends(get_db)):
+async def get_conversations(current_user=Depends(get_current_active_user), db: Session = Depends(get_db)):
     """
     获取当前用户的所有对话列表
     """
-    conversations = db.query(Conversation).filter(Conversation.user_id == current_user.id).all()
+    conversations = db.query(Conversation).filter(
+        Conversation.user_id == current_user.id).all()
     return conversations
 
 
 # 获取特定对话
 @app.get("/api/conversations/{conversation_id}", response_model=ConversationResponse)
-async def get_conversation(conversation_id: int, current_user = Depends(get_current_active_user), db: Session = Depends(get_db)):
+async def get_conversation(conversation_id: int, current_user=Depends(get_current_active_user), db: Session = Depends(get_db)):
     """
     获取指定ID的对话信息
     """
-    conversation = db.query(Conversation).filter(Conversation.id == conversation_id, Conversation.user_id == current_user.id).first()
+    conversation = db.query(Conversation).filter(
+        Conversation.id == conversation_id, Conversation.user_id == current_user.id).first()
     if not conversation:
         raise HTTPException(status_code=404, detail="对话不存在")
     return conversation
@@ -124,30 +126,33 @@ async def get_conversation(conversation_id: int, current_user = Depends(get_curr
 
 # 获取对话的所有消息
 @app.get("/api/conversations/{conversation_id}/messages", response_model=List[MessageResponse])
-async def get_messages(conversation_id: int, current_user = Depends(get_current_active_user), db: Session = Depends(get_db)):
+async def get_messages(conversation_id: int, current_user=Depends(get_current_active_user), db: Session = Depends(get_db)):
     """
     获取指定对话的所有消息
     """
     # 验证对话存在且属于当前用户
-    conversation = db.query(Conversation).filter(Conversation.id == conversation_id, Conversation.user_id == current_user.id).first()
+    conversation = db.query(Conversation).filter(
+        Conversation.id == conversation_id, Conversation.user_id == current_user.id).first()
     if not conversation:
         raise HTTPException(status_code=404, detail="对话不存在")
-    
-    messages = db.query(Message).filter(Message.conversation_id == conversation_id).order_by(Message.created_at).all()
+
+    messages = db.query(Message).filter(
+        Message.conversation_id == conversation_id).order_by(Message.created_at).all()
     return messages
 
 
 # 创建新消息并获取LLM回复
 @app.post("/api/conversations/{conversation_id}/messages")
-async def create_message(conversation_id: int, message: MessageCreate, current_user = Depends(get_current_active_user), db: Session = Depends(get_db)):
+async def create_message(conversation_id: int, message: MessageCreate, current_user=Depends(get_current_active_user), db: Session = Depends(get_db)):
     """
     创建新消息并获取LLM的回复
     """
     # 验证对话存在且属于当前用户
-    conversation = db.query(Conversation).filter(Conversation.id == conversation_id, Conversation.user_id == current_user.id).first()
+    conversation = db.query(Conversation).filter(
+        Conversation.id == conversation_id, Conversation.user_id == current_user.id).first()
     if not conversation:
         raise HTTPException(status_code=404, detail="对话不存在")
-    
+
     # 保存用户消息
     db_message = Message(
         conversation_id=conversation_id,
@@ -156,45 +161,55 @@ async def create_message(conversation_id: int, message: MessageCreate, current_u
     )
     db.add(db_message)
     db.commit()
-    
+
     # 更新对话的更新时间
-    conversation.updated_at = db.query(Message).filter(Message.conversation_id == conversation_id).order_by(Message.created_at.desc()).first().created_at
+    conversation.updated_at = db.query(Message).filter(
+        Message.conversation_id == conversation_id).order_by(Message.created_at.desc()).first().created_at
     db.commit()
-    
+
     # 获取历史消息
-    messages = db.query(Message).filter(Message.conversation_id == conversation_id).order_by(Message.created_at).all()
+    messages = db.query(Message).filter(
+        Message.conversation_id == conversation_id).order_by(Message.created_at).all()
     history_chat = await format_history_for_llm(messages)
-    
+
     # 创建LLM请求
     llm_request = LLMRequest(
         query=message.content,
         history_chat=history_chat
     )
-    
+
     # 返回流式响应
     return await process_llm_request(llm_request)
 
 
 # 直接调用LLM（无历史记录）
 @app.post("/api/llm/chat")
-async def chat_with_llm(request: LLMRequest, current_user = Depends(get_current_active_user)):
+async def chat_with_llm(request: LLMRequest, current_user=Depends(get_current_active_user)):
     """
     直接与LLM对话，不保存历史记录
     """
     return await process_llm_request(request)
 
 
-# 保存LLM回复
+@app.post("/api/tot/chat")
+async def chat_with_tot(request: TOTRequest, current_user=Depends(get_current_active_user)):
+    """
+    直接与LLM对话，不保存历史记录
+    """
+    return await process_tot_request(request)
+
+
 @app.post("/api/conversations/{conversation_id}/save_response", response_model=MessageResponse)
-async def save_llm_response(conversation_id: int, message: MessageCreate, current_user = Depends(get_current_active_user), db: Session = Depends(get_db)):
+async def save_llm_response(conversation_id: int, message: MessageCreate, current_user=Depends(get_current_active_user), db: Session = Depends(get_db)):
     """
     保存LLM的回复消息
     """
     # 验证对话存在且属于当前用户
-    conversation = db.query(Conversation).filter(Conversation.id == conversation_id, Conversation.user_id == current_user.id).first()
+    conversation = db.query(Conversation).filter(
+        Conversation.id == conversation_id, Conversation.user_id == current_user.id).first()
     if not conversation:
         raise HTTPException(status_code=404, detail="对话不存在")
-    
+
     # 保存LLM回复
     db_message = Message(
         conversation_id=conversation_id,
@@ -204,11 +219,11 @@ async def save_llm_response(conversation_id: int, message: MessageCreate, curren
     db.add(db_message)
     db.commit()
     db.refresh(db_message)
-    
+
     # 更新对话的更新时间
     conversation.updated_at = db_message.created_at
     db.commit()
-    
+
     return db_message
 
 

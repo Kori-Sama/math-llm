@@ -71,6 +71,10 @@ class LLMRequest(BaseModel):
     history_chat: List[str] = Field(default_factory=list)
 
 
+class TOTRequest(BaseModel):
+    query: str
+
+
 class LLMResponse(BaseModel):
     status: int
     error: str = ""
