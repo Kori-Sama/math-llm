@@ -12,9 +12,13 @@ load_dotenv()
 # 获取LLM API URL
 TIR_API_URL = os.getenv("TIR_API_URL")
 TOT_API_URL = os.getenv("TOT_API_URL")
+COT_API_URL = os.getenv("COT_API_URL")
 
+print("TIR_API_URL:", TIR_API_URL)
+print("TOT_API_URL:", TOT_API_URL)
+print("COT_API_URL:", COT_API_URL)
 
-async def call_tir_api(query: str, history_chat: List[str]) -> AsyncGenerator[str, None]:
+async def call_llm_api(query: str, history_chat: List[str], model:str) -> AsyncGenerator[str, None]:
     """
     调用LLM API并返回流式响应
     """
@@ -23,8 +27,10 @@ async def call_tir_api(query: str, history_chat: List[str]) -> AsyncGenerator[st
         "history_chat": history_chat
     }
 
+    url = TIR_API_URL if model == 'tir' else COT_API_URL
+
     async with httpx.AsyncClient() as client:
-        async with client.stream('POST', TIR_API_URL, json=request_data, timeout=60.0) as response:
+        async with client.stream('POST', url, json=request_data, timeout=60.0) as response:
             if response.status_code != 200:
                 error_msg = json.dumps({
                     "status": -1,
@@ -48,7 +54,7 @@ async def call_tot_api(query: str) -> AsyncGenerator[str, None]:
     }
 
     async with httpx.AsyncClient() as client:
-        async with client.stream('POST', TOT_API_URL, json=request_data, timeout=60.0) as response:
+        async with client.stream('POST', TOT_API_URL, json=request_data, timeout=180.0) as response:
             if response.status_code != 200:
                 error_msg = json.dumps({
                     "status": -1,
@@ -71,7 +77,7 @@ async def process_llm_request(request: LLMRequest) -> EventSourceResponse:
     处理LLM请求并返回SSE响应
     """
     return EventSourceResponse(
-        call_tir_api(request.query, request.history_chat),
+        call_llm_api(request.query, request.history_chat, request.model),
         media_type="text/event-stream"
     )
 

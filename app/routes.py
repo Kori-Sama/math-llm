@@ -143,7 +143,7 @@ async def get_messages(conversation_id: int, current_user=Depends(get_current_ac
 
 # 创建新消息并获取LLM回复
 @app.post("/api/conversations/{conversation_id}/messages")
-async def create_message(conversation_id: int, message: MessageCreate, current_user=Depends(get_current_active_user), db: Session = Depends(get_db)):
+async def create_message(conversation_id: int, message: MessageCreate, model:str="tir" ,current_user=Depends(get_current_active_user), db: Session = Depends(get_db)):
     """
     创建新消息并获取LLM的回复
     """
@@ -162,10 +162,24 @@ async def create_message(conversation_id: int, message: MessageCreate, current_u
     db.add(db_message)
     db.commit()
 
+    # 检查是否是第一条消息，如果是则更新对话标题
+    message_count = db.query(Message).filter(Message.conversation_id == conversation_id).count()
+    if message_count == 1:
+        # 截取用户消息的前30个字符作为标题，如果超过30个字符则添加...
+        new_title = message.content[:30] + ('...' if len(message.content) > 30 else '')
+        conversation.title = new_title
+
     # 更新对话的更新时间
     conversation.updated_at = db.query(Message).filter(
         Message.conversation_id == conversation_id).order_by(Message.created_at.desc()).first().created_at
     db.commit()
+    
+    if model == 'tot':
+        llm_request = TOTRequest(
+            query=message.content
+        )
+        # 返回流式响应
+        return await process_tot_request(llm_request)
 
     # 获取历史消息
     messages = db.query(Message).filter(
@@ -175,7 +189,8 @@ async def create_message(conversation_id: int, message: MessageCreate, current_u
     # 创建LLM请求
     llm_request = LLMRequest(
         query=message.content,
-        history_chat=history_chat
+        history_chat=history_chat,
+        model=model
     )
 
     # 返回流式响应

@@ -69,7 +69,7 @@ class MessageResponse(MessageBase):
 class LLMRequest(BaseModel):
     query: str
     history_chat: List[str] = Field(default_factory=list)
-
+    model: str = "tir"
 
 class TOTRequest(BaseModel):
     query: str
