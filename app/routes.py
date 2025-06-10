@@ -7,9 +7,10 @@ from typing import List
 
 from app.database import get_db, engine
 from app.models import Base, User, Conversation, Message
-from app.schemas import TOTRequest, UserCreate, UserResponse, Token, ConversationCreate, ConversationResponse, MessageCreate, MessageResponse, LLMRequest
+from app.schemas import TOTRequest, UserCreate, UserResponse, Token, ConversationCreate, ConversationResponse, MessageCreate, MessageResponse, LLMRequest, OCRRequest, OCRResponse
 from app.auth import authenticate_user, create_access_token, get_password_hash, get_current_active_user, ACCESS_TOKEN_EXPIRE_MINUTES
 from app.llm_service import process_llm_request, format_history_for_llm, process_tot_request
+from app.ocr_service import get_ocr_service
 
 # 创建数据库表
 Base.metadata.create_all(bind=engine)
@@ -256,6 +257,46 @@ async def update_conversation(conversation_id: int, title: str, current_user=Dep
     conversation.title = title
     db.commit()
     return conversation
+
+
+@app.post("/api/ocr/recognize", response_model=OCRResponse)
+async def ocr_recognize(request: OCRRequest, current_user=Depends(get_current_active_user)):
+    """
+    数学试题OCR识别接口
+    
+    支持通过base64编码的图片识别数学试题内容，
+    返回结构化的文本识别结果，包括公式的Latex格式输出。
+    """
+    try:
+        ocr_service = get_ocr_service()
+        result = await ocr_service.recognize_math_paper(
+            image_base64=request.image_base64,
+            config=request.config
+        )
+        return result
+        
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"OCR识别服务异常: {str(e)}"
+        )
+
+
+@app.post("/api/ocr/test")
+async def ocr_test():
+    """
+    OCR服务测试接口，检查服务配置是否正确
+    """
+    try:
+        get_ocr_service()
+        return {"success": True, "message": "OCR服务配置正常"}
+    except Exception as e:
+        return {"success": False, "message": f"OCR服务配置异常: {str(e)}"}
 
 
 @app.get("/health")

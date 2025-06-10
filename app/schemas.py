@@ -85,3 +85,26 @@ class LLMResponse(BaseModel):
 class Token(BaseModel):
     access_token: str
     token_type: str
+
+
+# OCR相关模型
+class OCRRequest(BaseModel):
+    image_base64: str
+    config: Optional[dict] = Field(default_factory=lambda: {"task_type": 1, "is_structuralization": True})
+
+
+class TextItem(BaseModel):
+    text: str
+    confidence: Optional[float] = None
+    position: Optional[dict] = None
+
+
+class OCRResponse(BaseModel):
+    success: bool
+    message: str = ""
+    data: Optional[dict] = None
+    text_items: List[TextItem] = Field(default_factory=list)
+    angle: Optional[int] = None
+    
+    class Config:
+        orm_mode = True
